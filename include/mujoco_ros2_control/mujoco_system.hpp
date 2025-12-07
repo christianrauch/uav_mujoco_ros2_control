@@ -11,7 +11,7 @@
 #include <hardware_interface/hardware_info.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 
-#include <mujoco.h>
+#include <mujoco/mujoco.h>
 
 namespace mujoco_ros2_control
 {

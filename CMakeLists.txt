@@ -8,10 +8,7 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(controller_manager REQUIRED)
 
-find_path(MUJOCO_INCLUDE_DIR mujoco.h)
-find_library(MUJOCO_LIBRARY NAMES mujoco)
-
-include_directories(include ${MUJOCO_INCLUDE_DIR})
+find_package(mujoco REQUIRED)
 
 add_library(mujoco_system SHARED
   src/mujoco_system.cpp
@@ -21,7 +18,7 @@ target_include_directories(mujoco_system PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
-target_link_libraries(mujoco_system PUBLIC ${MUJOCO_LIBRARY})
+target_link_libraries(mujoco_system PUBLIC mujoco::mujoco)
 
 ament_target_dependencies(mujoco_system PUBLIC
   rclcpp
