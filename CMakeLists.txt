@@ -38,9 +38,7 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
-install(FILES resource/mujoco_ros2_control_system.xml
-  DESTINATION share/${PROJECT_NAME}
-)
+pluginlib_export_plugin_description_file(hardware_interface resource/mujoco_ros2_control_system.xml)
 
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
