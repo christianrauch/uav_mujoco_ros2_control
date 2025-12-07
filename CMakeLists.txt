@@ -7,7 +7,6 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(controller_manager REQUIRED)
-find_package(ros2_control_interfaces REQUIRED)
 
 find_path(MUJOCO_INCLUDE_DIR mujoco.h)
 find_library(MUJOCO_LIBRARY NAMES mujoco)
@@ -24,13 +23,12 @@ target_include_directories(mujoco_system PUBLIC
 
 target_link_libraries(mujoco_system PUBLIC ${MUJOCO_LIBRARY})
 
-ament_target_dependencies(mujoco_system
+ament_target_dependencies(mujoco_system PUBLIC
   rclcpp
   rclcpp_lifecycle
   hardware_interface
   pluginlib
   controller_manager
-  ros2_control_interfaces
 )
 
 install(TARGETS mujoco_system
