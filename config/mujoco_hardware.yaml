@@ -1,0 +1,9 @@
+mujoco_system:
+  ros__parameters:
+    hardware_plugin: "mujoco_ros2_control/MujocoSystem"
+    mj_model_path: "/path/to/your_robot.mjcf"
+    mj_dt: 0.001
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000
