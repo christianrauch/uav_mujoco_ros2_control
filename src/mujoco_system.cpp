@@ -57,22 +57,22 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
 std::vector<hardware_interface::StateInterface> MujocoSystem::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> out;
-  for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
-    auto & name = get_info().joints[i].name;
-    out.emplace_back(name, hardware_interface::HW_IF_POSITION, &hw_positions_[i]);
-    out.emplace_back(name, hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]);
-    out.emplace_back(name, hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]);
-  }
+  // for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
+  //   auto & name = get_info().joints[i].name;
+  //   out.emplace_back(name, hardware_interface::HW_IF_POSITION, &hw_positions_[i]);
+  //   out.emplace_back(name, hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]);
+  //   out.emplace_back(name, hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]);
+  // }
   return out;
 }
 
 std::vector<hardware_interface::CommandInterface> MujocoSystem::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> out;
-  for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
-    auto & name = get_info().joints[i].name;
-    out.emplace_back(name, hardware_interface::HW_IF_EFFORT, &hw_commands_[i]);
-  }
+  // for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
+  //   auto & name = get_info().joints[i].name;
+  //   out.emplace_back(name, hardware_interface::HW_IF_EFFORT, &hw_commands_[i]);
+  // }
   return out;
 }
 
@@ -93,18 +93,18 @@ hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const 
 {
   for (int i = 0; i < model_->nu; ++i) data_->ctrl[i] = 0.0;
 
-  for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
-    auto & name = get_info().joints[i].name;
-    int aid = mj_name2id(model_, mjOBJ_ACTUATOR, name.c_str());
-    if (aid >= 0 && aid < model_->nu)
-      data_->ctrl[aid] = hw_commands_[i];
-    else {
-      std::string alt = "act_" + name;
-      int aid2 = mj_name2id(model_, mjOBJ_ACTUATOR, alt.c_str());
-      if (aid2 >= 0 && aid2 < model_->nu)
-        data_->ctrl[aid2] = hw_commands_[i];
-    }
-  }
+  // for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
+  //   auto & name = get_info().joints[i].name;
+  //   int aid = mj_name2id(model_, mjOBJ_ACTUATOR, name.c_str());
+  //   if (aid >= 0 && aid < model_->nu)
+  //     data_->ctrl[aid] = hw_commands_[i];
+  //   else {
+  //     std::string alt = "act_" + name;
+  //     int aid2 = mj_name2id(model_, mjOBJ_ACTUATOR, alt.c_str());
+  //     if (aid2 >= 0 && aid2 < model_->nu)
+  //       data_->ctrl[aid2] = hw_commands_[i];
+  //   }
+  // }
 
   mj_step(model_, data_);
   return hardware_interface::return_type::OK;
