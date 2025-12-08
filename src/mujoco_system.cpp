@@ -96,6 +96,23 @@ private:
         mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05*yoffset, &mjvis.scn, &mjvis.cam);
     }
 
+    void render_loop() {
+        glfwMakeContextCurrent(window);
+
+        // render scene
+        mjrRect viewport = {0, 0, 0, 0};
+        glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
+
+        mjv_updateScene(model_, data_, &mjvis.opt, nullptr, &mjvis.cam, mjCAT_ALL, &mjvis.scn);
+        mjr_render(viewport, &mjvis.scn, &mjvis.con);
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+        // glfwWaitEvents();
+
+        glfwMakeContextCurrent(nullptr);
+    }
+
 private:
     mjModel * model_ = nullptr;
     mjData * data_ = nullptr;
@@ -113,6 +130,8 @@ private:
     bool button_right =  false;
     double lastx = 0;
     double lasty = 0;
+
+    bool visualise = false;
 };
 
 
@@ -132,6 +151,9 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
 
   std::string model_path = params.hardware_info.hardware_parameters.count("mj_model_path") ?
                                params.hardware_info.hardware_parameters.at("mj_model_path") : "robot.mjcf";
+
+  visualise = params.hardware_info.hardware_parameters.count("vis") ?
+                  params.hardware_info.hardware_parameters.at("vis") == "true" : false;
 
   char error[1000] = "";
   model_ = mj_loadXML(model_path.c_str(), nullptr, error, 1000);
@@ -174,48 +196,51 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
       std::cout << "Hello from child thread (" << tid << ")" << std::endl;
   }
 
-  // init GLFW
-  if (!glfwInit()) {
-      return CallbackReturn::FAILURE;
+  if (visualise) {
+      // init GLFW
+      if (!glfwInit()) {
+          return CallbackReturn::FAILURE;
+      }
+
+      // create window
+      window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
+      glfwMakeContextCurrent(window);
+      glfwSwapInterval(0);
+
+      // Create a static lambda that captures the window pointer
+      // auto* self = this;
+      glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int scancode, int act, int mods) {
+        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
+        if (system) system->keyboard(w, key, scancode, act, mods);
+      });
+
+      glfwSetWindowUserPointer(window, this);
+      glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int act, int mods) {
+        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
+        if (system) system->mouse_button(w, button, act, mods);
+      });
+
+      glfwSetCursorPosCallback(window, [](GLFWwindow* w, double xpos, double ypos) {
+        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
+        if (system) system->mouse_move(w, xpos, ypos);
+      });
+
+      glfwSetScrollCallback(window, [](GLFWwindow* w, double xoffset, double yoffset) {
+        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
+        if (system) system->scroll(w, xoffset, yoffset);
+      });
+
+      mjv_defaultCamera(&mjvis.cam);
+      mjv_defaultOption(&mjvis.opt);
+      mjv_defaultScene(&mjvis.scn);
+      mjr_defaultContext(&mjvis.con);
+
+      mjv_makeScene(model_, &mjvis.scn, 2000);
+      mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
+
+      glfwMakeContextCurrent(nullptr);
+
   }
-
-  // create window
-  window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
-  glfwMakeContextCurrent(window);
-  glfwSwapInterval(1);
-
-  // Create a static lambda that captures the window pointer
-  // auto* self = this;
-  glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int scancode, int act, int mods) {
-    auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-    if (system) system->keyboard(w, key, scancode, act, mods);
-  });
-
-  glfwSetWindowUserPointer(window, this);
-  glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int act, int mods) {
-    auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-    if (system) system->mouse_button(w, button, act, mods);
-  });
-
-  glfwSetCursorPosCallback(window, [](GLFWwindow* w, double xpos, double ypos) {
-    auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-    if (system) system->mouse_move(w, xpos, ypos);
-  });
-
-  glfwSetScrollCallback(window, [](GLFWwindow* w, double xoffset, double yoffset) {
-    auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-    if (system) system->scroll(w, xoffset, yoffset);
-  });
-
-  mjv_defaultCamera(&mjvis.cam);
-  mjv_defaultOption(&mjvis.opt);
-  mjv_defaultScene(&mjvis.scn);
-  mjr_defaultContext(&mjvis.con);
-
-  mjv_makeScene(model_, &mjvis.scn, 2000);
-  mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
-
-  glfwMakeContextCurrent(nullptr);
 
   return CallbackReturn::SUCCESS;
 }
@@ -312,20 +337,9 @@ hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const 
 
   // std::cout << "context ..." << std::endl;
 
-  glfwMakeContextCurrent(window);
-
-  // render scene
-  mjrRect viewport = {0, 0, 0, 0};
-  glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
-
-  mjv_updateScene(model_, data_, &mjvis.opt, nullptr, &mjvis.cam, mjCAT_ALL, &mjvis.scn);
-  mjr_render(viewport, &mjvis.scn, &mjvis.con);
-
-  glfwSwapBuffers(window);
-  glfwPollEvents();
-  // glfwWaitEvents();
-
-  glfwMakeContextCurrent(nullptr);
+  if (visualise) {
+    render_loop();
+  }
 
   // std::cout << "bla ..." << std::endl;
 
@@ -343,7 +357,9 @@ hardware_interface::CallbackReturn MujocoSystem::on_cleanup(const rclcpp_lifecyc
   mj_deleteData(data_);
   mj_deleteModel(model_);
 
-  glfwTerminate();
+  if (visualise) {
+    glfwTerminate();
+  }
 
   return CallbackReturn::SUCCESS;
 }
