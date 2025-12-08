@@ -324,6 +324,26 @@ hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const 
 {
   for (int i = 0; i < model_->nu; ++i) data_->ctrl[i] = 0.0;
 
+  const std::string actuator_prefix = "rotor";
+  constexpr uint8_t nrotors = 4;
+
+  // data_->act[0] = get_command<double>("rotor/1/velocity");
+  // data_->act[1] = get_command<double>("rotor/2/velocity");
+  // data_->act[2] = get_command<double>("rotor/3/velocity");
+  // data_->act[3] = get_command<double>("rotor/4/velocity");
+
+  for (uint8_t i = 0; i < nrotors; i++)
+  {
+      const double cmd = get_command<double>(actuator_prefix + "/" + std::to_string(i + 1) + "/" + hardware_interface::HW_IF_VELOCITY);
+      // std::cout << "Rotor " << (i + 1) << " command: " << cmd << std::endl;
+      const float umin = model_->actuator_ctrlrange[(i*2)+0];
+      const float umax = model_->actuator_ctrlrange[(i*2)+1];
+
+      // std::cout << "Rotor " << (i + 1) << " command: " << cmd << " (umin: " << umin << ", umax: " << umax << ")" << std::endl;
+
+      data_->ctrl[i] = umin + cmd * (umax - umin);
+  }
+
   mj_step(model_, data_);
 
   // const pid_t pid = getpid();
