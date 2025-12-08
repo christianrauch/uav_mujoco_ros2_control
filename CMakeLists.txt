@@ -9,12 +9,13 @@ find_package(pluginlib REQUIRED)
 find_package(controller_manager REQUIRED)
 
 find_package(mujoco REQUIRED)
+find_package(glfw3 REQUIRED)
 
 add_library(uav_mujoco_system SHARED
   src/mujoco_system.cpp
 )
 
-target_link_libraries(uav_mujoco_system PUBLIC mujoco::mujoco)
+target_link_libraries(uav_mujoco_system PUBLIC mujoco::mujoco glfw)
 
 ament_target_dependencies(uav_mujoco_system PUBLIC
   rclcpp
