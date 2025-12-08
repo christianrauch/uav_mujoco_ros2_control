@@ -162,6 +162,10 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
                 ? params.hardware_info.hardware_parameters.at("vis") == "true"
                 : false;
 
+  const double gravity = params.hardware_info.hardware_parameters.count("gravity")
+                           ? std::stod(params.hardware_info.hardware_parameters.at("gravity"))
+                           : -9.81;  // m/s^2 in z direction
+
   char error[1000] = "";
   model_ = mj_loadXML(model_path.c_str(), nullptr, error, 1000);
   RCLCPP_WARN(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
@@ -170,6 +174,8 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     RCLCPP_ERROR(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
     return CallbackReturn::FAILURE;
   }
+
+  model_->opt.gravity[2] = gravity;
 
   data_ = mj_makeData(model_);
 
