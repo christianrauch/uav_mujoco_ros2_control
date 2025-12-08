@@ -26,8 +26,6 @@ public:
     hardware_interface::return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
     hardware_interface::return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-    virtual ~MujocoSystem();
-
 private:
     // keyboard callback
     void keyboard(GLFWwindow* window, int key, int scancode, int act, int mods) {
@@ -96,7 +94,7 @@ private:
         mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05*yoffset, &mjvis.scn, &mjvis.cam);
     }
 
-    void render_loop() {
+    void render() {
         glfwMakeContextCurrent(window);
 
         // render scene
@@ -184,17 +182,15 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
     return CallbackReturn::FAILURE;
   }
 
-  RCLCPP_INFO(rclcpp::get_logger("MujocoSystem"), "...");
-
-  // are we in the main thread here?
-  const pid_t pid = getpid();
-  const pid_t tid = gettid();
-  if (tid == pid) {
-      std::cout << "Hello from main thread (" << tid << ")" << std::endl;
-  }
-  else {
-      std::cout << "Hello from child thread (" << tid << ")" << std::endl;
-  }
+  // // are we in the main thread here?
+  // const pid_t pid = getpid();
+  // const pid_t tid = gettid();
+  // if (tid == pid) {
+  //     std::cout << "Hello from main thread (" << tid << ")" << std::endl;
+  // }
+  // else {
+  //     std::cout << "Hello from child thread (" << tid << ")" << std::endl;
+  // }
 
   if (visualise) {
       // init GLFW
@@ -208,7 +204,6 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
       glfwSwapInterval(0);
 
       // Create a static lambda that captures the window pointer
-      // auto* self = this;
       glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int scancode, int act, int mods) {
         auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
         if (system) system->keyboard(w, key, scancode, act, mods);
@@ -247,12 +242,6 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
 
 hardware_interface::return_type MujocoSystem::read(const rclcpp::Time &, const rclcpp::Duration &)
 {
-    // mjtSensor_
-    // mjSENS_GYRO
-  // data_->sensordata[mj_name2id(model_, mjSENS_GYRO, "body_gyro")];
-
-    // TODO: make "base_imu" configurable?
-
   const int gyro_id = mj_name2id(model_, mjOBJ_SENSOR, "body_gyro");
   if (gyro_id >= 0) {
     int sensor_adr = model_->sensor_adr[gyro_id];
@@ -322,46 +311,25 @@ hardware_interface::return_type MujocoSystem::read(const rclcpp::Time &, const r
 
 hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const rclcpp::Duration &)
 {
-  for (int i = 0; i < model_->nu; ++i) data_->ctrl[i] = 0.0;
+  for (int i = 0; i < model_->nu; ++i) data_->ctrl[i] = 0;
 
   const std::string actuator_prefix = "rotor";
   constexpr uint8_t nrotors = 4;
 
-  // data_->act[0] = get_command<double>("rotor/1/velocity");
-  // data_->act[1] = get_command<double>("rotor/2/velocity");
-  // data_->act[2] = get_command<double>("rotor/3/velocity");
-  // data_->act[3] = get_command<double>("rotor/4/velocity");
-
   for (uint8_t i = 0; i < nrotors; i++)
   {
-      const double cmd = get_command<double>(actuator_prefix + "/" + std::to_string(i + 1) + "/" + hardware_interface::HW_IF_VELOCITY);
-      // std::cout << "Rotor " << (i + 1) << " command: " << cmd << std::endl;
       const float umin = model_->actuator_ctrlrange[(i*2)+0];
       const float umax = model_->actuator_ctrlrange[(i*2)+1];
-
-      // std::cout << "Rotor " << (i + 1) << " command: " << cmd << " (umin: " << umin << ", umax: " << umax << ")" << std::endl;
+      const double cmd = get_command<double>(actuator_prefix + "/" + std::to_string(i + 1) + "/" + hardware_interface::HW_IF_VELOCITY);
 
       data_->ctrl[i] = umin + cmd * (umax - umin);
   }
 
   mj_step(model_, data_);
 
-  // const pid_t pid = getpid();
-  // const pid_t tid = gettid();
-  // if (tid == pid) {
-  //     std::cout << "Hello from main thread (" << tid << ")" << std::endl;
-  // }
-  // else {
-  //     std::cout << "Hello from child thread (" << tid << ")" << std::endl;
-  // }
-
-  // std::cout << "context ..." << std::endl;
-
   if (visualise) {
-    render_loop();
+    render();
   }
-
-  // std::cout << "bla ..." << std::endl;
 
   return hardware_interface::return_type::OK;
 }
@@ -371,23 +339,16 @@ hardware_interface::CallbackReturn MujocoSystem::on_cleanup(const rclcpp_lifecyc
   if (data_) mj_deleteData(data_), data_ = nullptr;
   if (model_) mj_deleteModel(model_), model_ = nullptr;
 
-  // cleanup
-  mjv_freeScene(&mjvis.scn);
-  mjr_freeContext(&mjvis.con);
-  mj_deleteData(data_);
-  mj_deleteModel(model_);
-
   if (visualise) {
+    mjv_freeScene(&mjvis.scn);
+    mjr_freeContext(&mjvis.con);
+    mj_deleteData(data_);
+    mj_deleteModel(model_);
+
     glfwTerminate();
   }
 
   return CallbackReturn::SUCCESS;
-}
-
-MujocoSystem::~MujocoSystem()
-{
-  if (data_) mj_deleteData(data_);
-  if (model_) mj_deleteModel(model_);
 }
 
 }
