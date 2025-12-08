@@ -1,25 +1,17 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>uav_mujoco_ros2_control</name>
-  <version>0.1.0</version>
-  <description>ros2_control SystemInterface for MuJoCo</description>
-  <maintainer email="you@example.com">Your Name</maintainer>
-  <license>BSD-3-Clause</license>
+  <version>0.0.0</version>
+  <description>MuJoCo UAV SystemInterface</description>
+  <maintainer email="Rauch.Christian@gmx.de">Christian Rauch</maintainer>
+  <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>rclcpp</depend>
-  <depend>rclcpp_lifecycle</depend>
   <depend>hardware_interface</depend>
   <depend>pluginlib</depend>
-  <depend>controller_manager</depend>
-  <depend>controller_interface</depend>
-  <depend>ros2_control_interfaces</depend>
-  <depend>ros2_control_node</depend>
-  <depend>std_msgs</depend>
-
-  <build_depend>mujoco</build_depend>
-  <exec_depend>mujoco</exec_depend>
+  <depend>mujoco</depend>
+  <depend>glfw</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

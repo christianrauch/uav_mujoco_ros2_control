@@ -1,0 +1,9 @@
+<library path="uav_mujoco_system">
+  <class
+    name="uav_mujoco_ros2_control/MuJoCoSystem"
+    type="uav_mujoco_ros2_control::MuJoCoSystem"
+    base_class_type="hardware_interface::SystemInterface"
+  >
+    <description>MuJoCo UAV SystemInterface</description>
+  </class>
+</library>

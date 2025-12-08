@@ -1,269 +1,282 @@
-#include <string>
-#include <vector>
-#include <memory>
-
-#include <hardware_interface/system_interface.hpp>
-#include <hardware_interface/types/hardware_interface_return_values.hpp>
-#include <hardware_interface/handle.hpp>
-#include <hardware_interface/hardware_info.hpp>
-#include <rclcpp_lifecycle/state.hpp>
-
-#include <mujoco/mujoco.h>
 #include <GLFW/glfw3.h>
-
+#include <mujoco/mujoco.h>
+#include <hardware_interface/system_interface.hpp>
 #include <pluginlib/class_list_macros.hpp>
-#include <rclcpp/rclcpp.hpp>
-
+#include <rclcpp_lifecycle/state.hpp>
+#include <string>
 
 namespace uav_mujoco_ros2_control
 {
 
-class MujocoSystem : public hardware_interface::SystemInterface
+class MuJoCoSystem : public hardware_interface::SystemInterface
 {
 public:
-    hardware_interface::CallbackReturn on_init(const hardware_interface::HardwareComponentInterfaceParams & params) override;
-    hardware_interface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State & previous_state) override;
-    hardware_interface::return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
-    hardware_interface::return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
+  hardware_interface::CallbackReturn on_init(
+    const hardware_interface::HardwareComponentInterfaceParams & params) override;
+  hardware_interface::CallbackReturn on_cleanup(
+    const rclcpp_lifecycle::State & previous_state) override;
+  hardware_interface::return_type read(
+    const rclcpp::Time & time, const rclcpp::Duration & period) override;
+  hardware_interface::return_type write(
+    const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
-    // keyboard callback
-    void keyboard(GLFWwindow* window, int key, int scancode, int act, int mods) {
-        // backspace: reset simulation
-        if (act==GLFW_PRESS && key==GLFW_KEY_BACKSPACE) {
-            mj_resetData(model_, data_);
-            mj_forward(model_, data_);
-        }
-        if (act==GLFW_PRESS && key==GLFW_KEY_ESCAPE) {
-            glfwDestroyWindow(window);
-        }
+  // keyboard callback
+  void keyboard(GLFWwindow * window, int key, int scancode, int act, int mods)
+  {
+    // backspace: reset simulation
+    if (act == GLFW_PRESS && key == GLFW_KEY_BACKSPACE)
+    {
+      mj_resetData(model_, data_);
+      mj_forward(model_, data_);
+    }
+    if (act == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+    {
+      glfwDestroyWindow(window);
+    }
+  }
+
+  // mouse button callback
+  void mouse_button(GLFWwindow * window, int button, int act, int mods)
+  {
+    // update button state
+    button_left = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+    button_middle = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
+    button_right = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+
+    // update mouse position
+    glfwGetCursorPos(window, &lastx, &lasty);
+  }
+
+  // mouse move callback
+  void mouse_move(GLFWwindow * window, double xpos, double ypos)
+  {
+    // no buttons down: nothing to do
+    if (!button_left && !button_middle && !button_right)
+    {
+      return;
     }
 
+    // compute mouse displacement, save
+    double dx = xpos - lastx;
+    double dy = ypos - lasty;
+    lastx = xpos;
+    lasty = ypos;
 
-    // mouse button callback
-    void mouse_button(GLFWwindow* window, int button, int act, int mods) {
-        // update button state
-        button_left = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)==GLFW_PRESS);
-        button_middle = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE)==GLFW_PRESS);
-        button_right = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)==GLFW_PRESS);
+    // get current window size
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
 
-        // update mouse position
-        glfwGetCursorPos(window, &lastx, &lasty);
+    // get shift key state
+    bool mod_shift =
+      (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+       glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+
+    // determine action based on mouse button
+    mjtMouse action;
+    if (button_right)
+    {
+      action = mod_shift ? mjMOUSE_MOVE_H : mjMOUSE_MOVE_V;
+    }
+    else if (button_left)
+    {
+      action = mod_shift ? mjMOUSE_ROTATE_H : mjMOUSE_ROTATE_V;
+    }
+    else
+    {
+      action = mjMOUSE_ZOOM;
     }
 
+    // move camera
+    mjv_moveCamera(model_, action, dx / height, dy / height, &mjvis.scn, &mjvis.cam);
+  }
 
-    // mouse move callback
-    void mouse_move(GLFWwindow* window, double xpos, double ypos) {
-        // no buttons down: nothing to do
-        if (!button_left && !button_middle && !button_right) {
-            return;
-        }
+  // scroll callback
+  void scroll(GLFWwindow * window, double xoffset, double yoffset)
+  {
+    // emulate vertical mouse motion = 5% of window height
+    mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05 * yoffset, &mjvis.scn, &mjvis.cam);
+  }
 
-        // compute mouse displacement, save
-        double dx = xpos - lastx;
-        double dy = ypos - lasty;
-        lastx = xpos;
-        lasty = ypos;
+  void render()
+  {
+    glfwMakeContextCurrent(window);
 
-        // get current window size
-        int width, height;
-        glfwGetWindowSize(window, &width, &height);
+    // render scene
+    mjrRect viewport = {0, 0, 0, 0};
+    glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
 
-        // get shift key state
-        bool mod_shift = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)==GLFW_PRESS ||
-                          glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT)==GLFW_PRESS);
+    mjv_updateScene(model_, data_, &mjvis.opt, nullptr, &mjvis.cam, mjCAT_ALL, &mjvis.scn);
+    mjr_render(viewport, &mjvis.scn, &mjvis.con);
 
-        // determine action based on mouse button
-        mjtMouse action;
-        if (button_right) {
-            action = mod_shift ? mjMOUSE_MOVE_H : mjMOUSE_MOVE_V;
-        } else if (button_left) {
-            action = mod_shift ? mjMOUSE_ROTATE_H : mjMOUSE_ROTATE_V;
-        } else {
-            action = mjMOUSE_ZOOM;
-        }
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+    // glfwWaitEvents();
 
-        // move camera
-        mjv_moveCamera(model_, action, dx/height, dy/height, &mjvis.scn, &mjvis.cam);
-    }
-
-
-    // scroll callback
-    void scroll(GLFWwindow* window, double xoffset, double yoffset) {
-        // emulate vertical mouse motion = 5% of window height
-        mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05*yoffset, &mjvis.scn, &mjvis.cam);
-    }
-
-    void render() {
-        glfwMakeContextCurrent(window);
-
-        // render scene
-        mjrRect viewport = {0, 0, 0, 0};
-        glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
-
-        mjv_updateScene(model_, data_, &mjvis.opt, nullptr, &mjvis.cam, mjCAT_ALL, &mjvis.scn);
-        mjr_render(viewport, &mjvis.scn, &mjvis.con);
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-        // glfwWaitEvents();
-
-        glfwMakeContextCurrent(nullptr);
-    }
+    glfwMakeContextCurrent(nullptr);
+  }
 
 private:
-    mjModel * model_ = nullptr;
-    mjData * data_ = nullptr;
+  mjModel * model_ = nullptr;
+  mjData * data_ = nullptr;
 
-    GLFWwindow* window = nullptr;
-    struct {
-        mjvCamera cam;
-        mjvOption opt;
-        mjvScene scn;
-        mjrContext con;
-    } mjvis;
+  GLFWwindow * window = nullptr;
+  struct
+  {
+    mjvCamera cam;
+    mjvOption opt;
+    mjvScene scn;
+    mjrContext con;
+  } mjvis;
 
-    bool button_left = false;
-    bool button_middle = false;
-    bool button_right =  false;
-    double lastx = 0;
-    double lasty = 0;
+  bool button_left = false;
+  bool button_middle = false;
+  bool button_right = false;
+  double lastx = 0;
+  double lasty = 0;
 
-    bool visualise = false;
+  bool visualise = false;
 };
 
-
-hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interface::HardwareComponentInterfaceParams &params)
+hardware_interface::CallbackReturn MuJoCoSystem::on_init(
+  const hardware_interface::HardwareComponentInterfaceParams & params)
 {
-    const CallbackReturn bcr = hardware_interface::SystemInterface::on_init(params);
+  const CallbackReturn bcr = hardware_interface::SystemInterface::on_init(params);
 
-    if (bcr != CallbackReturn::SUCCESS)
-    {
-        return bcr;
-    }
+  if (bcr != CallbackReturn::SUCCESS)
+  {
+    return bcr;
+  }
 
-    if (params.hardware_info.joints.empty()) {
-        RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "No joints specified in hardware info");
-        return CallbackReturn::FAILURE;
-    }
-
-  std::string model_path = params.hardware_info.hardware_parameters.count("mj_model_path") ?
-                               params.hardware_info.hardware_parameters.at("mj_model_path") : "robot.mjcf";
-
-  visualise = params.hardware_info.hardware_parameters.count("vis") ?
-                  params.hardware_info.hardware_parameters.at("vis") == "true" : false;
-
-  char error[1000] = "";
-  model_ = mj_loadXML(model_path.c_str(), nullptr, error, 1000);
-  // model_ = mj_compile(mj_parseXMLString(info.original_xml.c_str(), nullptr, error, 1000), nullptr);
-  RCLCPP_WARN(rclcpp::get_logger("MujocoSystem"), "Failed to load MuJoCo model: %s", error);
-  if (!model_) {
-    RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "Failed to load MuJoCo model: %s", error);
+  if (params.hardware_info.joints.empty())
+  {
+    RCLCPP_ERROR(rclcpp::get_logger("MuJoCoSystem"), "No joints specified in hardware info");
     return CallbackReturn::FAILURE;
   }
 
-  // Log all joints
-  for (int i = 0; i < model_->njnt; ++i) {
-    RCLCPP_INFO(rclcpp::get_logger("MujocoSystem"), "Joint %d: %s", i, mj_id2name(model_, mjOBJ_JOINT, i));
-  }
+  const std::string model_path = params.hardware_info.hardware_parameters.count("mj_model_path")
+                                   ? params.hardware_info.hardware_parameters.at("mj_model_path")
+                                   : "robot.mjcf";
 
-  // Log all actuators
-  RCLCPP_INFO(rclcpp::get_logger("MujocoSystem"), "Actuators: %d", model_->nu);
-  for (int i = 0; i < model_->nu; ++i) {
-    RCLCPP_INFO(rclcpp::get_logger("MujocoSystem"), "Actuator %d: %s", i, mj_id2name(model_, mjOBJ_ACTUATOR, i));
+  visualise = params.hardware_info.hardware_parameters.count("vis")
+                ? params.hardware_info.hardware_parameters.at("vis") == "true"
+                : false;
+
+  char error[1000] = "";
+  model_ = mj_loadXML(model_path.c_str(), nullptr, error, 1000);
+  RCLCPP_WARN(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
+  if (!model_)
+  {
+    RCLCPP_ERROR(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
+    return CallbackReturn::FAILURE;
   }
 
   data_ = mj_makeData(model_);
 
-  if (!data_) {
-    RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "Failed to create MuJoCo data");
+  if (!data_)
+  {
+    RCLCPP_ERROR(rclcpp::get_logger("MuJoCoSystem"), "Failed to create MuJoCo data");
     mj_deleteModel(model_);
     model_ = nullptr;
     return CallbackReturn::FAILURE;
   }
 
-  // // are we in the main thread here?
-  // const pid_t pid = getpid();
-  // const pid_t tid = gettid();
-  // if (tid == pid) {
-  //     std::cout << "Hello from main thread (" << tid << ")" << std::endl;
-  // }
-  // else {
-  //     std::cout << "Hello from child thread (" << tid << ")" << std::endl;
-  // }
+  if (visualise)
+  {
+    if (!glfwInit())
+    {
+      return CallbackReturn::FAILURE;
+    }
 
-  if (visualise) {
-      // init GLFW
-      if (!glfwInit()) {
-          return CallbackReturn::FAILURE;
-      }
+    window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(0);
 
-      // create window
-      window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
-      glfwMakeContextCurrent(window);
-      glfwSwapInterval(0);
-
-      // Create a static lambda that captures the window pointer
-      glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int scancode, int act, int mods) {
-        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-        if (system) system->keyboard(w, key, scancode, act, mods);
+    glfwSetKeyCallback(
+      window,
+      [](GLFWwindow * w, int key, int scancode, int act, int mods)
+      {
+        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+        if (system)
+        {
+          system->keyboard(w, key, scancode, act, mods);
+        }
       });
 
-      glfwSetWindowUserPointer(window, this);
-      glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int act, int mods) {
-        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-        if (system) system->mouse_button(w, button, act, mods);
+    glfwSetWindowUserPointer(window, this);
+    glfwSetMouseButtonCallback(
+      window,
+      [](GLFWwindow * w, int button, int act, int mods)
+      {
+        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+        if (system)
+        {
+          system->mouse_button(w, button, act, mods);
+        }
       });
 
-      glfwSetCursorPosCallback(window, [](GLFWwindow* w, double xpos, double ypos) {
-        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-        if (system) system->mouse_move(w, xpos, ypos);
+    glfwSetCursorPosCallback(
+      window,
+      [](GLFWwindow * w, double xpos, double ypos)
+      {
+        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+        if (system)
+        {
+          system->mouse_move(w, xpos, ypos);
+        }
       });
 
-      glfwSetScrollCallback(window, [](GLFWwindow* w, double xoffset, double yoffset) {
-        auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
-        if (system) system->scroll(w, xoffset, yoffset);
+    glfwSetScrollCallback(
+      window,
+      [](GLFWwindow * w, double xoffset, double yoffset)
+      {
+        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+        if (system)
+        {
+          system->scroll(w, xoffset, yoffset);
+        }
       });
 
-      mjv_defaultCamera(&mjvis.cam);
-      mjv_defaultOption(&mjvis.opt);
-      mjv_defaultScene(&mjvis.scn);
-      mjr_defaultContext(&mjvis.con);
+    glfwSetWindowCloseCallback(window, [](GLFWwindow * w) { glfwDestroyWindow(w); });
 
-      mjv_makeScene(model_, &mjvis.scn, 2000);
-      mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
+    mjv_defaultCamera(&mjvis.cam);
+    mjv_defaultOption(&mjvis.opt);
+    mjv_defaultScene(&mjvis.scn);
+    mjr_defaultContext(&mjvis.con);
 
-      glfwMakeContextCurrent(nullptr);
+    mjv_makeScene(model_, &mjvis.scn, 2000);
+    mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
 
+    glfwMakeContextCurrent(nullptr);
   }
 
   return CallbackReturn::SUCCESS;
 }
 
-hardware_interface::return_type MujocoSystem::read(const rclcpp::Time &, const rclcpp::Duration &)
+hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const rclcpp::Duration &)
 {
   const int gyro_id = mj_name2id(model_, mjOBJ_SENSOR, "body_gyro");
-  if (gyro_id >= 0) {
-    int sensor_adr = model_->sensor_adr[gyro_id];
-    // Angular velocities from gyro sensor
+  if (gyro_id >= 0)
+  {
+    const int sensor_adr = model_->sensor_adr[gyro_id];
     set_state<double>("base_imu/angular_velocity.x", data_->sensordata[sensor_adr]);
     set_state<double>("base_imu/angular_velocity.y", data_->sensordata[sensor_adr + 1]);
     set_state<double>("base_imu/angular_velocity.z", data_->sensordata[sensor_adr + 2]);
   }
 
   const int accel_id = mj_name2id(model_, mjOBJ_SENSOR, "body_linacc");
-  if (accel_id >= 0) {
-    int sensor_adr = model_->sensor_adr[accel_id];
-    // Linear accelerations from accelerometer sensor
+  if (accel_id >= 0)
+  {
+    const int sensor_adr = model_->sensor_adr[accel_id];
     set_state<double>("base_imu/linear_acceleration.x", data_->sensordata[sensor_adr]);
     set_state<double>("base_imu/linear_acceleration.y", data_->sensordata[sensor_adr + 1]);
     set_state<double>("base_imu/linear_acceleration.z", data_->sensordata[sensor_adr + 2]);
   }
 
   const int quat_id = mj_name2id(model_, mjOBJ_SENSOR, "body_quat");
-  if (quat_id >= 0) {
-    int sensor_adr = model_->sensor_adr[quat_id];
-    // Orientation from quaternion sensor
+  if (quat_id >= 0)
+  {
+    const int sensor_adr = model_->sensor_adr[quat_id];
     set_state<double>("base_imu/orientation.x", data_->sensordata[sensor_adr]);
     set_state<double>("base_imu/orientation.y", data_->sensordata[sensor_adr + 1]);
     set_state<double>("base_imu/orientation.z", data_->sensordata[sensor_adr + 2]);
@@ -309,37 +322,49 @@ hardware_interface::return_type MujocoSystem::read(const rclcpp::Time &, const r
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const rclcpp::Duration &)
+hardware_interface::return_type MuJoCoSystem::write(const rclcpp::Time &, const rclcpp::Duration &)
 {
-  for (int i = 0; i < model_->nu; ++i) data_->ctrl[i] = 0;
+  for (int i = 0; i < model_->nu; ++i)
+  {
+    data_->ctrl[i] = 0;
+  }
 
   const std::string actuator_prefix = "rotor";
   constexpr uint8_t nrotors = 4;
 
   for (uint8_t i = 0; i < nrotors; i++)
   {
-      const float umin = model_->actuator_ctrlrange[(i*2)+0];
-      const float umax = model_->actuator_ctrlrange[(i*2)+1];
-      const double cmd = get_command<double>(actuator_prefix + "/" + std::to_string(i + 1) + "/" + hardware_interface::HW_IF_VELOCITY);
+    const float umin = model_->actuator_ctrlrange[(i * 2) + 0];
+    const float umax = model_->actuator_ctrlrange[(i * 2) + 1];
+    const double cmd = get_command<double>(
+      actuator_prefix + "/" + std::to_string(i + 1) + "/" + hardware_interface::HW_IF_VELOCITY);
 
-      data_->ctrl[i] = umin + cmd * (umax - umin);
+    data_->ctrl[i] = umin + cmd * (umax - umin);
   }
 
   mj_step(model_, data_);
 
-  if (visualise) {
+  if (visualise)
+  {
     render();
   }
 
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::CallbackReturn MujocoSystem::on_cleanup(const rclcpp_lifecycle::State &)
+hardware_interface::CallbackReturn MuJoCoSystem::on_cleanup(const rclcpp_lifecycle::State &)
 {
-  if (data_) mj_deleteData(data_), data_ = nullptr;
-  if (model_) mj_deleteModel(model_), model_ = nullptr;
+  if (data_)
+  {
+    mj_deleteData(data_), data_ = nullptr;
+  }
+  if (model_)
+  {
+    mj_deleteModel(model_), model_ = nullptr;
+  }
 
-  if (visualise) {
+  if (visualise)
+  {
     mjv_freeScene(&mjvis.scn);
     mjr_freeContext(&mjvis.con);
     mj_deleteData(data_);
@@ -351,5 +376,6 @@ hardware_interface::CallbackReturn MujocoSystem::on_cleanup(const rclcpp_lifecyc
   return CallbackReturn::SUCCESS;
 }
 
-}
-PLUGINLIB_EXPORT_CLASS(uav_mujoco_ros2_control::MujocoSystem, hardware_interface::SystemInterface)
+}  // namespace uav_mujoco_ros2_control
+
+PLUGINLIB_EXPORT_CLASS(uav_mujoco_ros2_control::MuJoCoSystem, hardware_interface::SystemInterface)
