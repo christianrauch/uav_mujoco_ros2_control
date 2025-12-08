@@ -14,6 +14,7 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+
 namespace uav_mujoco_ros2_control
 {
 
@@ -125,17 +126,9 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
     }
 
     if (params.hardware_info.joints.empty()) {
-    RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "No joints specified in hardware info");
-    return CallbackReturn::FAILURE;
-  }
-
-  // parse_command_interface_descriptions(params.hardware_info.joints, joint_command_interfaces_);
-
-  // size_t nj = params.joints.size();
-  // hw_positions_.assign(nj, 0.0);
-  // hw_velocities_.assign(nj, 0.0);
-  // hw_efforts_.assign(nj, 0.0);
-  // hw_commands_.assign(nj, 0.0);
+        RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "No joints specified in hardware info");
+        return CallbackReturn::FAILURE;
+    }
 
   std::string model_path = params.hardware_info.hardware_parameters.count("mj_model_path") ?
                                params.hardware_info.hardware_parameters.at("mj_model_path") : "robot.mjcf";
@@ -161,6 +154,7 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
   }
 
   data_ = mj_makeData(model_);
+
   if (!data_) {
     RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "Failed to create MuJoCo data");
     mj_deleteModel(model_);
@@ -170,22 +164,20 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
 
   RCLCPP_INFO(rclcpp::get_logger("MujocoSystem"), "...");
 
-  // mujoco_joint_ids_.clear();
-  // for (auto & j : info.joints) {
-  //   int jid = mj_name2id(model_, mjOBJ_ACTUATOR, j.name.c_str());
-  //   if (jid < 0) {
-  //     RCLCPP_ERROR(rclcpp::get_logger("MujocoSystem"), "Joint %s missing", j.name.c_str());
-  //     return CallbackReturn::FAILURE;
-  //   }
-  //   mujoco_joint_ids_.push_back(jid);
-  // }
-
-  // if (params.hardware_info.hardware_parameters.count("mj_dt"))
-  //     sim_dt_ = std::stod(params.hardware_info.hardware_parameters.at("mj_dt"));
+  // are we in the main thread here?
+  const pid_t pid = getpid();
+  const pid_t tid = gettid();
+  if (tid == pid) {
+      std::cout << "Hello from main thread (" << tid << ")" << std::endl;
+  }
+  else {
+      std::cout << "Hello from child thread (" << tid << ")" << std::endl;
+  }
 
   // init GLFW
-  if (!glfwInit())
+  if (!glfwInit()) {
       return CallbackReturn::FAILURE;
+  }
 
   // create window
   window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
@@ -193,7 +185,7 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
   glfwSwapInterval(1);
 
   // Create a static lambda that captures the window pointer
-  auto* self = this;
+  // auto* self = this;
   glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int scancode, int act, int mods) {
     auto* system = static_cast<MujocoSystem*>(glfwGetWindowUserPointer(w));
     if (system) system->keyboard(w, key, scancode, act, mods);
@@ -222,6 +214,8 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(const hardware_interfac
 
   mjv_makeScene(model_, &mjvis.scn, 2000);
   mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
+
+  glfwMakeContextCurrent(nullptr);
 
   return CallbackReturn::SUCCESS;
 }
@@ -277,6 +271,27 @@ hardware_interface::return_type MujocoSystem::read(const rclcpp::Time &, const r
   //           << get_state<double>("base_imu/linear_acceleration.y") << ", "
   //           << get_state<double>("base_imu/linear_acceleration.z") << std::endl;
 
+  // for (int i = 0; i < model_->nbody; i++) {
+  //     const double* pos  = &data_->xpos[3 * i];   // body position
+  //     const double* xmat = &data_->xmat[9 * i];   // rotation matrix (3x3)
+  //     const double* quat = &data_->xquat[4 * i];  // quaternion
+
+  //     std::cout << "Body " << i << " (" << model_->names + model_->name_bodyadr[i] << ")\n";
+  //     std::cout << "  pos = [" << pos[0] << ", " << pos[1] << ", " << pos[2] << "]\n";
+
+  //     std::cout << "  quat = ["
+  //               << quat[0] << ", " << quat[1] << ", "
+  //               << quat[2] << ", " << quat[3] << "]\n";
+
+  //     std::cout << "  rot matrix:\n";
+  //     for (int r = 0; r < 3; r++) {
+  //         std::cout << "    "
+  //                   << xmat[3*r] << " "
+  //                   << xmat[3*r+1] << " "
+  //                   << xmat[3*r+2] << "\n";
+  //     }
+  // }
+
   return hardware_interface::return_type::OK;
 }
 
@@ -284,20 +299,20 @@ hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const 
 {
   for (int i = 0; i < model_->nu; ++i) data_->ctrl[i] = 0.0;
 
-  // for (size_t i = 0; i < mujoco_joint_ids_.size(); ++i) {
-  //   auto & name = get_info().joints[i].name;
-  //   int aid = mj_name2id(model_, mjOBJ_ACTUATOR, name.c_str());
-  //   if (aid >= 0 && aid < model_->nu)
-  //     data_->ctrl[aid] = hw_commands_[i];
-  //   else {
-  //     std::string alt = "act_" + name;
-  //     int aid2 = mj_name2id(model_, mjOBJ_ACTUATOR, alt.c_str());
-  //     if (aid2 >= 0 && aid2 < model_->nu)
-  //       data_->ctrl[aid2] = hw_commands_[i];
-  //   }
+  mj_step(model_, data_);
+
+  // const pid_t pid = getpid();
+  // const pid_t tid = gettid();
+  // if (tid == pid) {
+  //     std::cout << "Hello from main thread (" << tid << ")" << std::endl;
+  // }
+  // else {
+  //     std::cout << "Hello from child thread (" << tid << ")" << std::endl;
   // }
 
-  mj_step(model_, data_);
+  // std::cout << "context ..." << std::endl;
+
+  glfwMakeContextCurrent(window);
 
   // render scene
   mjrRect viewport = {0, 0, 0, 0};
@@ -308,6 +323,9 @@ hardware_interface::return_type MujocoSystem::write(const rclcpp::Time &, const 
 
   glfwSwapBuffers(window);
   glfwPollEvents();
+  // glfwWaitEvents();
+
+  glfwMakeContextCurrent(nullptr);
 
   // std::cout << "bla ..." << std::endl;
 
