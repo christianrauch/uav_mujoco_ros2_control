@@ -158,9 +158,7 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
                                    ? params.hardware_info.hardware_parameters.at("mj_model_path")
                                    : "robot.mjcf";
 
-  visualise = params.hardware_info.hardware_parameters.count("vis")
-                ? params.hardware_info.hardware_parameters.at("vis") == "true"
-                : false;
+  visualise = params.hardware_info.hardware_parameters.count("visualise");
 
   const double gravity = params.hardware_info.hardware_parameters.count("gravity")
                            ? std::stod(params.hardware_info.hardware_parameters.at("gravity"))
