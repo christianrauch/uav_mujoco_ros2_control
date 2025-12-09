@@ -4,6 +4,7 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 #include <string>
+#include <tf2_ros/transform_broadcaster.hpp>
 
 namespace uav_mujoco_ros2_control
 {
@@ -120,6 +121,8 @@ private:
   mjModel * model_ = nullptr;
   mjData * data_ = nullptr;
 
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster = nullptr;
+
   GLFWwindow * window = nullptr;
   struct
   {
@@ -136,6 +139,7 @@ private:
   double lasty = 0;
 
   bool visualise = false;
+  std::string imu_name;
 };
 
 hardware_interface::CallbackReturn MuJoCoSystem::on_init(
@@ -164,6 +168,8 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
                            ? std::stod(params.hardware_info.hardware_parameters.at("gravity"))
                            : -9.81;  // m/s^2 in z direction
 
+  imu_name = params.hardware_info.hardware_parameters.at("imu_name");
+
   char error[1000] = "";
   model_ = mj_loadXML(model_path.c_str(), nullptr, error, 1000);
   RCLCPP_WARN(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
@@ -184,6 +190,8 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     model_ = nullptr;
     return CallbackReturn::FAILURE;
   }
+
+  tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(get_node());
 
   if (visualise)
   {
@@ -263,28 +271,28 @@ hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const r
   if (gyro_id >= 0)
   {
     const int sensor_adr = model_->sensor_adr[gyro_id];
-    set_state<double>("base_imu/angular_velocity.x", data_->sensordata[sensor_adr]);
-    set_state<double>("base_imu/angular_velocity.y", data_->sensordata[sensor_adr + 1]);
-    set_state<double>("base_imu/angular_velocity.z", data_->sensordata[sensor_adr + 2]);
+    set_state<double>(imu_name + "/angular_velocity.x", data_->sensordata[sensor_adr]);
+    set_state<double>(imu_name + "/angular_velocity.y", data_->sensordata[sensor_adr + 1]);
+    set_state<double>(imu_name + "/angular_velocity.z", data_->sensordata[sensor_adr + 2]);
   }
 
   const int accel_id = mj_name2id(model_, mjOBJ_SENSOR, "body_linacc");
   if (accel_id >= 0)
   {
     const int sensor_adr = model_->sensor_adr[accel_id];
-    set_state<double>("base_imu/linear_acceleration.x", data_->sensordata[sensor_adr]);
-    set_state<double>("base_imu/linear_acceleration.y", data_->sensordata[sensor_adr + 1]);
-    set_state<double>("base_imu/linear_acceleration.z", data_->sensordata[sensor_adr + 2]);
+    set_state<double>(imu_name + "/linear_acceleration.x", data_->sensordata[sensor_adr]);
+    set_state<double>(imu_name + "/linear_acceleration.y", data_->sensordata[sensor_adr + 1]);
+    set_state<double>(imu_name + "/linear_acceleration.z", data_->sensordata[sensor_adr + 2]);
   }
 
   const int quat_id = mj_name2id(model_, mjOBJ_SENSOR, "body_quat");
   if (quat_id >= 0)
   {
     const int sensor_adr = model_->sensor_adr[quat_id];
-    set_state<double>("base_imu/orientation.x", data_->sensordata[sensor_adr]);
-    set_state<double>("base_imu/orientation.y", data_->sensordata[sensor_adr + 1]);
-    set_state<double>("base_imu/orientation.z", data_->sensordata[sensor_adr + 2]);
-    set_state<double>("base_imu/orientation.w", data_->sensordata[sensor_adr + 3]);
+    set_state<double>(imu_name + "/orientation.w", data_->sensordata[sensor_adr]);
+    set_state<double>(imu_name + "/orientation.x", data_->sensordata[sensor_adr + 1]);
+    set_state<double>(imu_name + "/orientation.y", data_->sensordata[sensor_adr + 2]);
+    set_state<double>(imu_name + "/orientation.z", data_->sensordata[sensor_adr + 3]);
   }
 
   // std::cout << "IMU readings: " << std::endl;
@@ -302,25 +310,56 @@ hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const r
   //           << get_state<double>("base_imu/linear_acceleration.y") << ", "
   //           << get_state<double>("base_imu/linear_acceleration.z") << std::endl;
 
-  // for (int i = 0; i < model_->nbody; i++) {
-  //     const double* pos  = &data_->xpos[3 * i];   // body position
-  //     const double* xmat = &data_->xmat[9 * i];   // rotation matrix (3x3)
-  //     const double* quat = &data_->xquat[4 * i];  // quaternion
+  // https:  // mujoco.readthedocs.io/en/2.2.1/programming.html
+  // To represent 3D orientations and rotations, MuJoCo uses unit quaternions - namely 4D unit
+  // vectors arranged as q = (w, x, y, z).
 
-  //     std::cout << "Body " << i << " (" << model_->names + model_->name_bodyadr[i] << ")\n";
-  //     std::cout << "  pos = [" << pos[0] << ", " << pos[1] << ", " << pos[2] << "]\n";
+  // Publish all rigid body transforms
+  std::vector<geometry_msgs::msg::TransformStamped> transforms;
+  for (int i = 0; i < model_->nbody; i++)
+  {
+    const double * pos = &data_->xpos[3 * i];
+    const double * quat = &data_->xquat[4 * i];
 
-  //     std::cout << "  quat = ["
-  //               << quat[0] << ", " << quat[1] << ", "
-  //               << quat[2] << ", " << quat[3] << "]\n";
+    geometry_msgs::msg::TransformStamped transform;
+    transform.header.stamp = get_clock()->now();
+    transform.header.frame_id = "world";
+    transform.child_frame_id = std::string(model_->names + model_->name_bodyadr[i]);
 
-  //     std::cout << "  rot matrix:\n";
-  //     for (int r = 0; r < 3; r++) {
-  //         std::cout << "    "
-  //                   << xmat[3*r] << " "
-  //                   << xmat[3*r+1] << " "
-  //                   << xmat[3*r+2] << "\n";
-  //     }
+    transform.transform.translation.x = pos[0];
+    transform.transform.translation.y = pos[1];
+    transform.transform.translation.z = pos[2];
+
+    transform.transform.rotation.w = quat[0];
+    transform.transform.rotation.x = quat[1];
+    transform.transform.rotation.y = quat[2];
+    transform.transform.rotation.z = quat[3];
+
+    transforms.push_back(transform);
+  }
+
+  tf_broadcaster->sendTransform(transforms);
+
+  // void sendTransform(const std::vector<geometry_msgs::msg::TransformStamped> & transforms);
+
+  // for (int i = 0; i < model_->nbody; i++)
+  // {
+  //   const double * pos = &data_->xpos[3 * i];    // body position
+  //   const double * xmat = &data_->xmat[9 * i];   // rotation matrix (3x3)
+  //   const double * quat = &data_->xquat[4 * i];  // quaternion
+
+  //   std::cout << "Body " << i << " (" << model_->names + model_->name_bodyadr[i] << ")\n";
+  //   std::cout << "  pos = [" << pos[0] << ", " << pos[1] << ", " << pos[2] << "]\n";
+
+  //   std::cout << "  quat = [" << quat[0] << ", " << quat[1] << ", " << quat[2] << ", " << quat[3]
+  //             << "]\n";
+
+  //   std::cout << "  rot matrix:\n";
+  //   for (int r = 0; r < 3; r++)
+  //   {
+  //     std::cout << "    " << xmat[3 * r] << " " << xmat[3 * r + 1] << " " << xmat[3 * r + 2]
+  //               << "\n";
+  //   }
   // }
 
   return hardware_interface::return_type::OK;
