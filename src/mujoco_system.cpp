@@ -326,9 +326,9 @@ hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const r
     transform.header.frame_id = "world";
     transform.child_frame_id = std::string(model_->names + model_->name_bodyadr[i]);
 
-    transform.transform.translation.x = pos[0];
-    transform.transform.translation.y = pos[1];
-    transform.transform.translation.z = pos[2];
+    // transform.transform.translation.x = pos[0];
+    // transform.transform.translation.y = pos[1];
+    // transform.transform.translation.z = pos[2];
 
     transform.transform.rotation.w = quat[0];
     transform.transform.rotation.x = quat[1];
