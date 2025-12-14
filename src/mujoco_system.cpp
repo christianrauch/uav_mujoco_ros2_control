@@ -3,8 +3,10 @@
 #include <hardware_interface/system_interface.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp_lifecycle/state.hpp>
+#include <realtime_tools/realtime_publisher.hpp>
 #include <string>
-#include <tf2_ros/transform_broadcaster.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+#include <tf2_ros/qos.hpp>
 
 namespace uav_mujoco_ros2_control
 {
@@ -121,7 +123,9 @@ private:
   mjModel * model_ = nullptr;
   mjData * data_ = nullptr;
 
-  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster = nullptr;
+  tf2_msgs::msg::TFMessage transforms;
+  rclcpp::Publisher<tf2_msgs::msg::TFMessage>::SharedPtr pub_tf = nullptr;
+  realtime_tools::RealtimePublisher<tf2_msgs::msg::TFMessage>::UniquePtr pub_rt_tf = nullptr;
 
   GLFWwindow * window = nullptr;
   struct
@@ -191,7 +195,12 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     return CallbackReturn::FAILURE;
   }
 
-  tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(get_node());
+  transforms.transforms.resize(model_->nbody);
+
+  pub_tf =
+    get_node()->create_publisher<tf2_msgs::msg::TFMessage>("/tf", tf2_ros::DynamicBroadcasterQoS());
+
+  pub_rt_tf = std::make_unique<realtime_tools::RealtimePublisher<tf2_msgs::msg::TFMessage>>(pub_tf);
 
   if (visualise)
   {
@@ -316,13 +325,12 @@ hardware_interface::return_type MuJoCoSystem::read(
   // vectors arranged as q = (w, x, y, z).
 
   // Publish all rigid body transforms
-  std::vector<geometry_msgs::msg::TransformStamped> transforms;
   for (int i = 0; i < model_->nbody; i++)
   {
     const double * pos = &data_->xpos[3 * i];
     const double * quat = &data_->xquat[4 * i];
 
-    geometry_msgs::msg::TransformStamped transform;
+    geometry_msgs::msg::TransformStamped & transform = transforms.transforms[i];
     transform.header.stamp = time;
     transform.header.frame_id = "world";
     transform.child_frame_id = std::string(model_->names + model_->name_bodyadr[i]);
@@ -335,13 +343,9 @@ hardware_interface::return_type MuJoCoSystem::read(
     transform.transform.rotation.x = quat[1];
     transform.transform.rotation.y = quat[2];
     transform.transform.rotation.z = quat[3];
-
-    transforms.push_back(transform);
   }
 
-  tf_broadcaster->sendTransform(transforms);
-
-  // void sendTransform(const std::vector<geometry_msgs::msg::TransformStamped> & transforms);
+  pub_rt_tf->try_publish(transforms);
 
   // for (int i = 0; i < model_->nbody; i++)
   // {
@@ -373,6 +377,8 @@ hardware_interface::return_type MuJoCoSystem::write(
   {
     data_->ctrl[i] = 0;
   }
+
+  // std::cout << "rate: " << 1 / period.seconds() << std::endl;
 
   const std::string actuator_prefix = "rotor";
   constexpr uint8_t nrotors = 4;
