@@ -6,7 +6,7 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(tf2_ros REQUIRED)
 
-find_package(mujoco REQUIRED)
+find_package(mujoco_vendor REQUIRED)
 find_package(glfw3 REQUIRED)
 
 add_library(uav_mujoco_system SHARED
