@@ -176,7 +176,6 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
 
   char error[1000] = "";
   model_ = mj_loadXML(model_path.c_str(), nullptr, error, 1000);
-  RCLCPP_WARN(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
   if (!model_)
   {
     RCLCPP_ERROR(rclcpp::get_logger("MuJoCoSystem"), "Failed to load MuJoCo model: %s", error);
