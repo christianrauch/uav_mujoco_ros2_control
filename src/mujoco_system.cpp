@@ -333,7 +333,7 @@ hardware_interface::return_type MuJoCoSystem::read(
     geometry_msgs::msg::TransformStamped & transform = transforms.transforms[i];
     transform.header.stamp = time;
     transform.header.frame_id = "world";
-    transform.child_frame_id = std::string(model_->names + model_->name_bodyadr[i]);
+    transform.child_frame_id = "mujoco/" + std::string(model_->names + model_->name_bodyadr[i]);
 
     // transform.transform.translation.x = pos[0];
     // transform.transform.translation.y = pos[1];
