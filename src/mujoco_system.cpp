@@ -265,7 +265,8 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
   return CallbackReturn::SUCCESS;
 }
 
-hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const rclcpp::Duration &)
+hardware_interface::return_type MuJoCoSystem::read(
+  const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   const int gyro_id = mj_name2id(model_, mjOBJ_SENSOR, "body_gyro");
   if (gyro_id >= 0)
@@ -322,7 +323,7 @@ hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const r
     const double * quat = &data_->xquat[4 * i];
 
     geometry_msgs::msg::TransformStamped transform;
-    transform.header.stamp = get_clock()->now();
+    transform.header.stamp = time;
     transform.header.frame_id = "world";
     transform.child_frame_id = std::string(model_->names + model_->name_bodyadr[i]);
 
@@ -365,7 +366,8 @@ hardware_interface::return_type MuJoCoSystem::read(const rclcpp::Time &, const r
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type MuJoCoSystem::write(const rclcpp::Time &, const rclcpp::Duration &)
+hardware_interface::return_type MuJoCoSystem::write(
+  const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   for (int i = 0; i < model_->nu; ++i)
   {
