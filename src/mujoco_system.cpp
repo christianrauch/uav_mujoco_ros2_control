@@ -327,6 +327,7 @@ hardware_interface::return_type MuJoCoSystem::read(
   for (int i = 0; i < model_->nbody; i++)
   {
     const double * pos = &data_->xpos[3 * i];
+    const double pos_norm = std::sqrt(pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2]);
     const double * quat = &data_->xquat[4 * i];
 
     geometry_msgs::msg::TransformStamped & transform = transforms.transforms[i];
@@ -334,9 +335,12 @@ hardware_interface::return_type MuJoCoSystem::read(
     transform.header.frame_id = "world";
     transform.child_frame_id = "mujoco/" + std::string(model_->names + model_->name_bodyadr[i]);
 
-    // transform.transform.translation.x = pos[0];
-    // transform.transform.translation.y = pos[1];
-    // transform.transform.translation.z = pos[2];
+    if (pos_norm > 0)
+    {
+      transform.transform.translation.x = pos[0] / pos_norm * 0.05;
+      transform.transform.translation.y = pos[1] / pos_norm * 0.05;
+      transform.transform.translation.z = pos[2] / pos_norm * 0.05;
+    }
 
     transform.transform.rotation.w = quat[0];
     transform.transform.rotation.x = quat[1];
