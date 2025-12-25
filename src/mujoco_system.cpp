@@ -172,6 +172,25 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
                            ? std::stod(params.hardware_info.hardware_parameters.at("gravity"))
                            : -9.81;  // m/s^2 in z direction
 
+  auto parse_csv_double = [](const std::string & input) -> std::vector<double>
+  {
+    std::vector<double> values;
+    std::stringstream ss(input);
+    std::string token;
+
+    while (std::getline(ss, token, ','))
+    {
+      values.push_back(std::stod(token));
+    }
+
+    return values;
+  };
+
+  const std::vector<double> init_vel =
+    params.hardware_info.hardware_parameters.count("initial_velocity")
+      ? parse_csv_double(params.hardware_info.hardware_parameters.at("initial_velocity"))
+      : std::vector<double>{0, 0, 0, 0, 0, 0};
+
   imu_name = params.hardware_info.hardware_parameters.at("imu_name");
 
   char error[1000] = "";
@@ -192,6 +211,13 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     mj_deleteModel(model_);
     model_ = nullptr;
     return CallbackReturn::FAILURE;
+  }
+
+  assert(init_vel.size() <= model_->nq);
+
+  for (int i = 0; i < init_vel.size(); i++)
+  {
+    data_->qvel[i] = init_vel[i];
   }
 
   transforms.transforms.resize(model_->nbody);
