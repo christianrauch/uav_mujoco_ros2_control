@@ -1,5 +1,8 @@
 #include <GLFW/glfw3.h>
+#include <glfw_adapter.h>
+#include <glfw_dispatch.h>
 #include <mujoco/mujoco.h>
+#include <simulate.h>
 #include <hardware_interface/system_interface.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp_lifecycle/state.hpp>
@@ -23,101 +26,101 @@ public:
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-private:
-  // keyboard callback
-  void keyboard(GLFWwindow * window, int key, int scancode, int act, int mods)
-  {
-    // backspace: reset simulation
-    if (act == GLFW_PRESS && key == GLFW_KEY_BACKSPACE)
-    {
-      mj_resetData(model_, data_);
-      mj_forward(model_, data_);
-    }
-    if (act == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
-    {
-      glfwDestroyWindow(window);
-    }
-  }
+  // private:
+  //   // keyboard callback
+  //   void keyboard(GLFWwindow * window, int key, int scancode, int act, int mods)
+  //   {
+  //     // backspace: reset simulation
+  //     if (act == GLFW_PRESS && key == GLFW_KEY_BACKSPACE)
+  //     {
+  //       mj_resetData(model_, data_);
+  //       mj_forward(model_, data_);
+  //     }
+  //     if (act == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+  //     {
+  //       glfwDestroyWindow(window);
+  //     }
+  //   }
 
-  // mouse button callback
-  void mouse_button(GLFWwindow * window, int button, int act, int mods)
-  {
-    // update button state
-    button_left = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
-    button_middle = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
-    button_right = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+  //   // mouse button callback
+  //   void mouse_button(GLFWwindow * window, int button, int act, int mods)
+  //   {
+  //     // update button state
+  //     button_left = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+  //     button_middle = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
+  //     button_right = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
 
-    // update mouse position
-    glfwGetCursorPos(window, &lastx, &lasty);
-  }
+  //     // update mouse position
+  //     glfwGetCursorPos(window, &lastx, &lasty);
+  //   }
 
-  // mouse move callback
-  void mouse_move(GLFWwindow * window, double xpos, double ypos)
-  {
-    // no buttons down: nothing to do
-    if (!button_left && !button_middle && !button_right)
-    {
-      return;
-    }
+  //   // mouse move callback
+  //   void mouse_move(GLFWwindow * window, double xpos, double ypos)
+  //   {
+  //     // no buttons down: nothing to do
+  //     if (!button_left && !button_middle && !button_right)
+  //     {
+  //       return;
+  //     }
 
-    // compute mouse displacement, save
-    double dx = xpos - lastx;
-    double dy = ypos - lasty;
-    lastx = xpos;
-    lasty = ypos;
+  //     // compute mouse displacement, save
+  //     double dx = xpos - lastx;
+  //     double dy = ypos - lasty;
+  //     lastx = xpos;
+  //     lasty = ypos;
 
-    // get current window size
-    int width, height;
-    glfwGetWindowSize(window, &width, &height);
+  //     // get current window size
+  //     int width, height;
+  //     glfwGetWindowSize(window, &width, &height);
 
-    // get shift key state
-    bool mod_shift =
-      (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-       glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+  //     // get shift key state
+  //     bool mod_shift =
+  //       (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+  //        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
 
-    // determine action based on mouse button
-    mjtMouse action;
-    if (button_right)
-    {
-      action = mod_shift ? mjMOUSE_MOVE_H : mjMOUSE_MOVE_V;
-    }
-    else if (button_left)
-    {
-      action = mod_shift ? mjMOUSE_ROTATE_H : mjMOUSE_ROTATE_V;
-    }
-    else
-    {
-      action = mjMOUSE_ZOOM;
-    }
+  //     // determine action based on mouse button
+  //     mjtMouse action;
+  //     if (button_right)
+  //     {
+  //       action = mod_shift ? mjMOUSE_MOVE_H : mjMOUSE_MOVE_V;
+  //     }
+  //     else if (button_left)
+  //     {
+  //       action = mod_shift ? mjMOUSE_ROTATE_H : mjMOUSE_ROTATE_V;
+  //     }
+  //     else
+  //     {
+  //       action = mjMOUSE_ZOOM;
+  //     }
 
-    // move camera
-    mjv_moveCamera(model_, action, dx / height, dy / height, &mjvis.scn, &mjvis.cam);
-  }
+  //     // move camera
+  //     mjv_moveCamera(model_, action, dx / height, dy / height, &mjvis.scn, &mjvis.cam);
+  //   }
 
-  // scroll callback
-  void scroll(GLFWwindow * window, double xoffset, double yoffset)
-  {
-    // emulate vertical mouse motion = 5% of window height
-    mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05 * yoffset, &mjvis.scn, &mjvis.cam);
-  }
+  //   // scroll callback
+  //   void scroll(GLFWwindow * window, double xoffset, double yoffset)
+  //   {
+  //     // emulate vertical mouse motion = 5% of window height
+  //     mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05 * yoffset, &mjvis.scn, &mjvis.cam);
+  //   }
 
-  void render()
-  {
-    glfwMakeContextCurrent(window);
+  //   void render()
+  //   {
+  //     glfwMakeContextCurrent(window);
 
-    // render scene
-    mjrRect viewport = {0, 0, 0, 0};
-    glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
+  //     // render scene
+  //     mjrRect viewport = {0, 0, 0, 0};
+  //     glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
 
-    mjv_updateScene(model_, data_, &mjvis.opt, nullptr, &mjvis.cam, mjCAT_ALL, &mjvis.scn);
-    mjr_render(viewport, &mjvis.scn, &mjvis.con);
+  //     mjv_updateScene(model_, data_, &mjvis.opt, nullptr, &mjvis.cam, mjCAT_ALL, &mjvis.scn);
+  //     mjr_render(viewport, &mjvis.scn, &mjvis.con);
 
-    glfwSwapBuffers(window);
-    glfwPollEvents();
-    // glfwWaitEvents();
+  //     glfwSwapBuffers(window);
+  //     glfwPollEvents();
+  //     // glfwWaitEvents();
 
-    glfwMakeContextCurrent(nullptr);
-  }
+  //     glfwMakeContextCurrent(nullptr);
+  //   }
 
 private:
   mjModel * model_ = nullptr;
@@ -132,9 +135,13 @@ private:
   {
     mjvCamera cam;
     mjvOption opt;
-    mjvScene scn;
-    mjrContext con;
+    // mjvScene scn;
+    // mjrContext con;
+    mjvPerturb pert;
   } mjvis;
+
+  std::unique_ptr<mujoco::Simulate> sim = nullptr;
+  std::thread render_thread;
 
   bool button_left = false;
   bool button_middle = false;
@@ -229,71 +236,96 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
 
   if (visualise)
   {
-    if (!glfwInit())
-    {
-      return CallbackReturn::FAILURE;
-    }
+    // if (!glfwInit())
+    // {
+    //   return CallbackReturn::FAILURE;
+    // }
 
-    window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(0);
+    // window = glfwCreateWindow(1200, 900, "MuJoCo Simulation", NULL, NULL);
+    // glfwMakeContextCurrent(window);
+    // glfwSwapInterval(0);
 
-    glfwSetKeyCallback(
-      window,
-      [](GLFWwindow * w, int key, int scancode, int act, int mods)
-      {
-        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
-        if (system)
-        {
-          system->keyboard(w, key, scancode, act, mods);
-        }
-      });
+    // glfwSetKeyCallback(
+    //   window,
+    //   [](GLFWwindow * w, int key, int scancode, int act, int mods)
+    //   {
+    //     auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+    //     if (system)
+    //     {
+    //       system->keyboard(w, key, scancode, act, mods);
+    //     }
+    //   });
 
-    glfwSetWindowUserPointer(window, this);
-    glfwSetMouseButtonCallback(
-      window,
-      [](GLFWwindow * w, int button, int act, int mods)
-      {
-        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
-        if (system)
-        {
-          system->mouse_button(w, button, act, mods);
-        }
-      });
+    // glfwSetWindowUserPointer(window, this);
+    // glfwSetMouseButtonCallback(
+    //   window,
+    //   [](GLFWwindow * w, int button, int act, int mods)
+    //   {
+    //     auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+    //     if (system)
+    //     {
+    //       system->mouse_button(w, button, act, mods);
+    //     }
+    //   });
 
-    glfwSetCursorPosCallback(
-      window,
-      [](GLFWwindow * w, double xpos, double ypos)
-      {
-        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
-        if (system)
-        {
-          system->mouse_move(w, xpos, ypos);
-        }
-      });
+    // glfwSetCursorPosCallback(
+    //   window,
+    //   [](GLFWwindow * w, double xpos, double ypos)
+    //   {
+    //     auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+    //     if (system)
+    //     {
+    //       system->mouse_move(w, xpos, ypos);
+    //     }
+    //   });
 
-    glfwSetScrollCallback(
-      window,
-      [](GLFWwindow * w, double xoffset, double yoffset)
-      {
-        auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
-        if (system)
-        {
-          system->scroll(w, xoffset, yoffset);
-        }
-      });
+    // glfwSetScrollCallback(
+    //   window,
+    //   [](GLFWwindow * w, double xoffset, double yoffset)
+    //   {
+    //     auto * system = static_cast<MuJoCoSystem *>(glfwGetWindowUserPointer(w));
+    //     if (system)
+    //     {
+    //       system->scroll(w, xoffset, yoffset);
+    //     }
+    //   });
 
-    glfwSetWindowCloseCallback(window, [](GLFWwindow * w) { glfwDestroyWindow(w); });
+    // glfwSetWindowCloseCallback(window, [](GLFWwindow * w) { glfwDestroyWindow(w); });
 
     mjv_defaultCamera(&mjvis.cam);
     mjv_defaultOption(&mjvis.opt);
-    mjv_defaultScene(&mjvis.scn);
-    mjr_defaultContext(&mjvis.con);
+    // mjv_defaultScene(&mjvis.scn);
+    // mjr_defaultContext(&mjvis.con);
+    mjv_defaultPerturb(&mjvis.pert);
 
-    mjv_makeScene(model_, &mjvis.scn, 2000);
-    mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
+    std::cout << "mujoco::Simulate ..." << std::endl;
 
-    glfwMakeContextCurrent(nullptr);
+    sim = std::make_unique<mujoco::Simulate>(
+      std::make_unique<mujoco::GlfwAdapter>(), &mjvis.cam, &mjvis.opt, &mjvis.pert,
+      /* is_passive = */ false);
+    std::cout << "init Simulate done" << std::endl;
+
+    // sim->RenderLoop();
+
+    sim->mnew_ = model_;
+    sim->dnew_ = data_;
+    sim->m_ = sim->mnew_;
+    sim->d_ = sim->dnew_;
+
+    std::cout << "sim thread ..." << std::endl;
+    render_thread = std::thread(&mujoco::Simulate::RenderLoop, sim.get());
+
+    // mjv_makeScene(model_, &mjvis.scn, 2000);
+    // mjr_makeContext(model_, &mjvis.con, mjFONTSCALE_150);
+
+    // std::cout << "load ..." << std::endl;
+    // sim->Load(model_, data_, "");
+
+    std::cout << "fwd ..." << std::endl;
+    mj_forward(model_, data_);
+
+    // glfwMakeContextCurrent(nullptr);
+    std::cout << "init done" << std::endl;
   }
 
   return CallbackReturn::SUCCESS;
@@ -363,9 +395,13 @@ hardware_interface::return_type MuJoCoSystem::read(
 
     if (pos_norm > 0)
     {
-      transform.transform.translation.x = pos[0] / pos_norm * 0.05;
-      transform.transform.translation.y = pos[1] / pos_norm * 0.05;
-      transform.transform.translation.z = pos[2] / pos_norm * 0.05;
+      // transform.transform.translation.x = pos[0];
+      // transform.transform.translation.y = pos[1];
+      // transform.transform.translation.z = pos[2];
+
+      transform.transform.translation.x = pos[0] / pos_norm * 0.1;
+      transform.transform.translation.y = pos[1] / pos_norm * 0.1;
+      transform.transform.translation.z = pos[2] / pos_norm * 0.1;
     }
 
     transform.transform.rotation.w = quat[0];
@@ -423,10 +459,36 @@ hardware_interface::return_type MuJoCoSystem::write(
   }
 
   mj_step(model_, data_);
+  // sim->RenderLoop();
 
   if (visualise)
   {
-    render();
+    // render();
+    // dynamic_cast<mujoco::GlfwAdapter *>(sim->platform_ui.get())
+    //   ->Glfw()
+    //   .glfwMakeContextCurrent(nullptr);
+
+    // mujoco::Glfw().glfwMakeContextCurrent(mujoco::Glfw().glfwGetCurrentContext());
+
+    // static_cast<*mujoco::GlfwAdapter>(sim->platform_ui.get())
+    //   ->Glfw()
+    //   .glfwMakeContextCurrent(nullptr);
+
+    // std::static_pointer_cast<mujoco::GlfwAdapter>(sim->platform_ui)
+    //   ->Glfw()
+    //   .glfwMakeContextCurrentnullptr(nullptr);
+
+    // sim = std::make_unique<mujoco::Simulate>(
+    //   std::make_unique<mujoco::GlfwAdapter>(), &mjvis.cam, &mjvis.opt, &mjvis.pert,
+    //   /* is_passive = */ false);
+    // sim->Load(model_, data_, "");
+    // mj_forward(model_, data_);
+
+    // sim->RenderLoop();
+
+    // sim.reset();
+
+    // mujoco::Glfw().glfwMakeContextCurrent(nullptr);
   }
 
   return hardware_interface::return_type::OK;
@@ -445,12 +507,12 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_cleanup(const rclcpp_lifecyc
 
   if (visualise)
   {
-    mjv_freeScene(&mjvis.scn);
-    mjr_freeContext(&mjvis.con);
-    mj_deleteData(data_);
-    mj_deleteModel(model_);
+    // mjv_freeScene(&mjvis.scn);
+    // mjr_freeContext(&mjvis.con);
+    // mj_deleteData(data_);
+    // mj_deleteModel(model_);
 
-    glfwTerminate();
+    // glfwTerminate();
   }
 
   return CallbackReturn::SUCCESS;
