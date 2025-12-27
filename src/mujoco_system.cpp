@@ -361,6 +361,10 @@ hardware_interface::return_type MuJoCoSystem::read(
     transform.header.frame_id = "world";
     transform.child_frame_id = "mujoco/" + std::string(model_->names + model_->name_bodyadr[i]);
 
+    transform.transform.translation.x = pos[0];
+    transform.transform.translation.y = pos[1];
+    transform.transform.translation.z = pos[2];
+
     if (pos_norm > 0)
     {
       transform.transform.translation.x = pos[0] / pos_norm * 0.05;
