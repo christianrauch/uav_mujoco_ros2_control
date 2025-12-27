@@ -191,6 +191,11 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
       ? parse_csv_double(params.hardware_info.hardware_parameters.at("initial_velocity"))
       : std::vector<double>{0, 0, 0, 0, 0, 0};
 
+  const std::vector<double> init_pos =
+    params.hardware_info.hardware_parameters.count("initial_position")
+      ? parse_csv_double(params.hardware_info.hardware_parameters.at("initial_position"))
+      : std::vector<double>{0, 0, 0, 1, 0, 0, 0};
+
   imu_name = params.hardware_info.hardware_parameters.at("imu_name");
 
   char error[1000] = "";
@@ -213,11 +218,18 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     return CallbackReturn::FAILURE;
   }
 
-  assert(init_vel.size() <= model_->nq);
+  assert(init_vel.size() == model_->nv);
 
   for (int i = 0; i < init_vel.size(); i++)
   {
     data_->qvel[i] = init_vel[i];
+  }
+
+  assert(init_pos.size() == model_->nq);
+
+  for (int i = 0; i < init_pos.size(); i++)
+  {
+    data_->qpos[i] = init_pos[i];
   }
 
   transforms.transforms.resize(model_->nbody);
