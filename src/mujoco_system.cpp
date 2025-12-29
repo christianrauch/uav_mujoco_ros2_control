@@ -232,8 +232,6 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     data_->qpos[i] = init_pos[i];
   }
 
-  transforms.transforms.resize(model_->nbody);
-
   pub_tf =
     get_node()->create_publisher<tf2_msgs::msg::TFMessage>("/tf", tf2_ros::DynamicBroadcasterQoS());
 
@@ -362,13 +360,19 @@ hardware_interface::return_type MuJoCoSystem::read(
   // vectors arranged as q = (w, x, y, z).
 
   // Publish all rigid body transforms
+  transforms.transforms.clear();
   for (int i = 0; i < model_->nbody; i++)
   {
     const double * pos = &data_->xpos[3 * i];
     const double pos_norm = std::sqrt(pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2]);
     const double * quat = &data_->xquat[4 * i];
 
-    geometry_msgs::msg::TransformStamped & transform = transforms.transforms[i];
+    if (!std::isfinite(pos_norm) || (quat[0] + quat[1] + quat[2] + quat[3] == 0))
+    {
+      continue;
+    }
+
+    geometry_msgs::msg::TransformStamped transform;
     transform.header.stamp = time;
     transform.header.frame_id = "world";
     transform.child_frame_id = "mujoco/" + std::string(model_->names + model_->name_bodyadr[i]);
@@ -388,6 +392,8 @@ hardware_interface::return_type MuJoCoSystem::read(
     transform.transform.rotation.x = quat[1];
     transform.transform.rotation.y = quat[2];
     transform.transform.rotation.z = quat[3];
+
+    transforms.transforms.push_back(transform);
   }
 
   pub_rt_tf->try_publish(transforms);
