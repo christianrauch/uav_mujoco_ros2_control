@@ -398,6 +398,18 @@ hardware_interface::return_type MuJoCoSystem::read(
 
   pub_rt_tf->try_publish(transforms);
 
+  if (model_->nbody > 1)
+  {
+    const std::string pose_prefix = std::string(model_->names + model_->name_bodyadr[1]);
+    set_state<double>(pose_prefix + "/position.x", data_->xpos[3]);
+    set_state<double>(pose_prefix + "/position.y", data_->xpos[4]);
+    set_state<double>(pose_prefix + "/position.z", data_->xpos[5]);
+    set_state<double>(pose_prefix + "/orientation.x", data_->xquat[5]);
+    set_state<double>(pose_prefix + "/orientation.y", data_->xquat[6]);
+    set_state<double>(pose_prefix + "/orientation.z", data_->xquat[7]);
+    set_state<double>(pose_prefix + "/orientation.w", data_->xquat[4]);
+  }
+
   // for (int i = 0; i < model_->nbody; i++)
   // {
   //   const double * pos = &data_->xpos[3 * i];    // body position
